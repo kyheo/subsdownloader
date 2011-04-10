@@ -60,6 +60,10 @@ def hashFile(name):
 
 
 def main(config):
+    files = os.listdir(config['in-dir'])
+    if not files:
+        log.debug('No files, ending')
+        return
     server = xmlrpclib.Server(config['url']);
     login = server.LogIn(config['user'], config['pass'], '',
                          config['user-agent'])
@@ -71,7 +75,7 @@ def main(config):
         return
 
     #Search 
-    for file in os.listdir(config['in-dir']):
+    for file in files:
         try:
             fname = os.path.join(config['in-dir'], file)
             log.debug('Processing ' + fname)
