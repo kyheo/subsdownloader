@@ -6,6 +6,8 @@ import base64
 import xmlrpclib
 import cStringIO
 import gzip
+import json
+import datetime
 import logging
 
 # Set user and pass values.
@@ -13,9 +15,11 @@ config = {'url': 'http://api.opensubtitles.org/xml-rpc',
           'user': '', # opensubtitles user
           'pass': '', # opensubtitles pass
           'user-agent': 'Kyheo SubsDown v0.1',
-          'in-dir': '', # Full path to in dir 
-          'out-dir': '', # Full path to out dir
+          'in-dir': 'q-in', # Full path to in dir 
+          'out-dir': 'q-out', # Full path to out dir
           'log-level': logging.DEBUG,
+          'quota': {'file': '/tmp/quota-file.json',
+                    'limit': 200,},
           }
 
 
@@ -59,11 +63,43 @@ def hashFile(name):
     return returnedhash, filesize 
 
 
+def quota_save_file(config, qty=0):
+    quota_data = {'date': datetime.date.today().isoformat(), 
+                  'qty': 0}
+    fp = open(config['file'], 'w')
+    json.dump(quota_data, fp)
+    fp.close()
+
+
+def quota_reached(config):
+    try:
+        fp = open(config['file'], 'r')
+        data = json.load(fp)
+        fp.close()
+        data['date'] = datetime.datetime.strptime(data['date'], '%Y-%m-%d')
+        data['date'] = data['date'].date()
+        if (data['date'] < datetime.date.today()) or \
+           (data['date'] == datetime.date.today() and \
+            data['qty'] < config['limit']):
+            return False
+        else:
+            return True
+    except IOError:
+        log.debug('No quota file, creating an empty one')
+        quota_save_file(config)
+    return False
+
+
 def main(config):
     files = os.listdir(config['in-dir'])
     if not files:
         log.debug('No files, ending')
         return
+
+    if quota_reached(config['quota']):
+        log.debug('Quota reached')
+        return
+
     server = xmlrpclib.Server(config['url']);
     login = server.LogIn(config['user'], config['pass'], '',
                          config['user-agent'])
@@ -75,6 +111,7 @@ def main(config):
         return
 
     #Search 
+    subs_downloaded = 0
     for file in files:
         try:
             fname = os.path.join(config['in-dir'], file)
@@ -111,6 +148,7 @@ def main(config):
                     fp.close()
                     dst_file = os.path.join(config['out-dir'], file)
                     shutil.move(fname, dst_file)
+                    subs_downloaded += 1
                     # Break for, don't want to loop over the next subs
                     break
                 except Exception, e:
@@ -123,6 +161,10 @@ def main(config):
     if logout['status'] == '200 OK':
         log.debug('Logged out')
 
+    quota_save_file(config['quota'], subs_downloaded)
+
 
 if __name__ == '__main__':
+    log.info('Starting')
     main(config)
+    log.info('Ending')
