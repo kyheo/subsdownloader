@@ -29,6 +29,49 @@ logging.basicConfig(level = config['log-level'],
 log = logging.getLogger(__name__)
 
 
+class Quota(object):
+
+    def __init__(self, config):
+        super(Quota, self).__init__()
+        self.config = config
+
+        self.date = None
+        self.qty = 0
+
+        self.initialize()
+
+
+    def initialize(self):
+        try:
+            log.debug('Loading quota information')
+            fp = open(self.config['file'], 'r')
+            data = json.load(fp)
+            fp.close()
+            self.qty = data['qty']
+            self.date = datetime.datetime.strptime(data['date'], '%Y-%m-%d')
+            self.date = self.date.date()
+        except IOError:
+            log.debug('  No quota file, creating one')
+            self.save()
+
+
+    def reached(self):
+        today = datetime.date.today()
+        if self.date == today and self.qty >= self.config['limit']:
+            return True
+        return False
+
+    
+    def save(self):
+        data = {'date': datetime.date.today().isoformat(),
+                'qty': self.qty}
+        fp = open(self.config['file'], 'w')
+        json.dump(data, fp)
+        fp.close()
+
+
+
+
 def hashFile(name):
     """Opensubtitles hash function modified to return not only the hash but
     also the file size.
@@ -63,31 +106,6 @@ def hashFile(name):
     return returnedhash, filesize 
 
 
-def quota_save_file(config, qty=0):
-    quota_data = {'date': datetime.date.today().isoformat(), 
-                  'qty': 0}
-    fp = open(config['file'], 'w')
-    json.dump(quota_data, fp)
-    fp.close()
-
-
-def quota_reached(config):
-    try:
-        fp = open(config['file'], 'r')
-        data = json.load(fp)
-        fp.close()
-        data['date'] = datetime.datetime.strptime(data['date'], '%Y-%m-%d')
-        data['date'] = data['date'].date()
-        if (data['date'] < datetime.date.today()) or \
-           (data['date'] == datetime.date.today() and \
-            data['qty'] < config['limit']):
-            return False
-        else:
-            return True
-    except IOError:
-        log.debug('No quota file, creating an empty one')
-        quota_save_file(config)
-    return False
 
 
 def main(config):
@@ -96,7 +114,9 @@ def main(config):
         log.debug('No files, ending')
         return
 
-    if quota_reached(config['quota']):
+    quota = Quota(config['quota'])
+
+    if quota.reached():
         log.debug('Quota reached')
         return
 
@@ -111,7 +131,6 @@ def main(config):
         return
 
     #Search 
-    subs_downloaded = 0
     for file in files:
         try:
             fname = os.path.join(config['in-dir'], file)
@@ -148,7 +167,7 @@ def main(config):
                     fp.close()
                     dst_file = os.path.join(config['out-dir'], file)
                     shutil.move(fname, dst_file)
-                    subs_downloaded += 1
+                    quota.qty += 1
                     # Break for, don't want to loop over the next subs
                     break
                 except Exception, e:
@@ -161,7 +180,7 @@ def main(config):
     if logout['status'] == '200 OK':
         log.debug('Logged out')
 
-    quota_save_file(config['quota'], subs_downloaded)
+    quota.save()
 
 
 if __name__ == '__main__':
