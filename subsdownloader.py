@@ -10,18 +10,16 @@ import json
 import datetime
 import logging
 
-# Set user and pass values.
-config = {'url': 'http://api.opensubtitles.org/xml-rpc',
-          'user': '', # opensubtitles user
-          'pass': '', # opensubtitles pass
-          'user-agent': 'Kyheo SubsDown v0.1',
-          'in-dir': 'q-in', # Full path to in dir 
-          'out-dir': 'q-out', # Full path to out dir
-          'log-level': logging.DEBUG,
+# Set full path to in and out queues
+config = {'opensubtitles': {'url': 'http://api.opensubtitles.org/xml-rpc',
+                            'user-agent': 'Kyheo SubsDown v0.1',
+                            'language': 'spa'},
+          'queues': {'in': 'q-in',
+                     'out': 'q-out',},
           'quota': {'file': '/tmp/quota-file.json',
                     'limit': 200,},
+          'log-level': logging.DEBUG,
           }
-
 
 logging.basicConfig(level = config['log-level'],
                     format  = '%(asctime)s - %(levelname)-s - %(name)s - %(message)s', 
@@ -109,7 +107,7 @@ def hashFile(name):
 
 
 def main(config):
-    files = os.listdir(config['in-dir'])
+    files = os.listdir(config['queues']['in'])
     if not files:
         log.debug('No files, ending')
         return
@@ -120,9 +118,8 @@ def main(config):
         log.debug('Quota reached')
         return
 
-    server = xmlrpclib.Server(config['url']);
-    login = server.LogIn(config['user'], config['pass'], '',
-                         config['user-agent'])
+    server = xmlrpclib.Server(config['opensubtitles']['url']);
+    login = server.LogIn('', '', '', config['opensubtitles']['user-agent'])
     if login['status'] == '200 OK':
         token = login['token']
         log.debug('Logged in with token %s' % (token,))
@@ -133,11 +130,12 @@ def main(config):
     #Search 
     for file in files:
         try:
-            fname = os.path.join(config['in-dir'], file)
+            fname = os.path.join(config['queues']['in'], file)
             log.debug('Processing ' + fname)
             hash, size = hashFile(fname)
             log.debug('Searching for ' + file)
-            data = server.SearchSubtitles(token, [{'sublanguageid': 'spa', 
+            lang = config['opensubtitles']['language']
+            data = server.SearchSubtitles(token, [{'sublanguageid': lang, 
                                                    'moviehash': str(hash), 
                                                    'moviebytesize': size}])
         except Exception,e:
@@ -161,11 +159,11 @@ def main(config):
                     body = gzip.GzipFile('', 'r', 0, sf_data).read()
 
                     # Write subtitle file
-                    dst_sub_name = os.path.join(config['out-dir'], sub_fname)
+                    dst_sub_name = os.path.join(config['queues']['out'], sub_fname)
                     fp = open(dst_sub_name, 'wb')
                     fp.write(body)
                     fp.close()
-                    dst_file = os.path.join(config['out-dir'], file)
+                    dst_file = os.path.join(config['queues']['out'], file)
                     shutil.move(fname, dst_file)
                     quota.qty += 1
                     # Break for, don't want to loop over the next subs
