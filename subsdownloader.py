@@ -84,7 +84,7 @@ def hashFile(name):
     hash = filesize 
         
     if filesize < 65536 * 2: 
-           raise Exception("SizeError")
+        raise Exception("SizeError")
      
     for x in range(65536/bytesize): 
         buffer = f.read(bytesize) 
@@ -137,7 +137,7 @@ def main(config):
             lang = config['opensubtitles']['language']
             data = server.SearchSubtitles(token, [{'sublanguageid': lang, 
                                                    'moviehash': str(hash), 
-                                                   'moviebytesize': size}])
+                                                   'moviebytesize': str(size)}])
         except Exception,e:
             log.error(str(e))
             # Lets try with the next file if any.
