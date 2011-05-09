@@ -8,6 +8,9 @@ import cStringIO
 import gzip
 import json
 import datetime
+import smtplib
+from email.mime.text import MIMEText
+
 import logging
 
 # Set full path to in and out queues
@@ -18,6 +21,15 @@ config = {'opensubtitles': {'url': 'http://api.opensubtitles.org/xml-rpc',
                      'out': 'q-out',},
           'quota': {'file': '/tmp/quota-file.json',
                     'limit': 200,},
+          'email': {'notify': True,
+                    'from': 'foo@bar.com',
+                    'to' : ['foo@bar.com'],
+                    'smtp' : 'smtp.gmail.com',
+                    'port' : 587,
+                    'use_tls': True,
+                    'username': 'foo@bar.com',
+                    'password': 'secretpassword'
+                   },
           'log-level': logging.DEBUG,
           }
 
@@ -106,6 +118,25 @@ def hashFile(name):
 
 
 
+def send_notification_email(config, subs):
+    msg = 'The following subtitles were downloaded:\n\n'
+    msg+= '\n'.join(['- %s' % (s, ) for s in subs])
+    msg+= '\n\nRegards, Subsdownloader'
+    email = MIMEText(msg)
+    email['Subject'] = 'Subtitle Download Notification'
+    email['From'] = config['from']
+    email['To'] = ', '.join(config['to'])
+
+    server = smtplib.SMTP(config['smtp'], config['port'])
+    if config['use_tls']:
+        server.starttls()
+    server.login(config['username'], config['password'])
+    server.sendmail(config['from'], config['to'], email.as_string())
+    server.quit()
+
+
+
+
 def main(config):
     files = os.listdir(config['queues']['in'])
     if not files:
@@ -127,7 +158,8 @@ def main(config):
         log.error('Couldn\'t log in.')
         return
 
-    #Search 
+    #Search
+    downloaded = []
     for file in files:
         try:
             fname = os.path.join(config['queues']['in'], file)
@@ -166,6 +198,7 @@ def main(config):
                     dst_file = os.path.join(config['queues']['out'], file)
                     shutil.move(fname, dst_file)
                     quota.qty += 1
+                    downloaded.append(sub_fname)
                     # Break for, don't want to loop over the next subs
                     break
                 except Exception, e:
@@ -177,6 +210,11 @@ def main(config):
     logout = server.LogOut(token)
     if logout['status'] == '200 OK':
         log.debug('Logged out')
+
+    #Send notification email
+    if 'email' in config and config['email']['notify'] == True:
+        log.debug('Sending notification email')
+        send_notification_email(config['email'], downloaded)
 
     quota.save()
 
