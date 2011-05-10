@@ -26,8 +26,8 @@ def parse_options():
     dir_group.add_option('-r', '--recursive', dest='dir_recursive', action='store_true', default=False, help='Recursive look for files.')
     dir_group.add_option('--exclude', type=str, dest='dir_exclude', action='append', default=[], help='Exclude regular expressions')
 
-    dir_group.add_option('--dir-in', dest='dir_in', default='q-in/*', help='Source directory')
-    dir_group.add_option('--dir-out', dest='dir_out', default='q-out', help='Destination directory')
+    dir_group.add_option('--dir-in', dest='dir_in', default='q-in', help='Source directory')
+    dir_group.add_option('--dir-out', dest='dir_out', help='Destination directory')
     parser.add_option_group(dir_group)
 
     quota_group = optparse.OptionGroup(parser, 'Quota options')
@@ -65,6 +65,9 @@ def parse_options():
             sys.exit(1)
 
     options.log_level = getattr(logging, options.log_level)
+
+    if not options.dir_out:
+        options.dir_out = options.dir_in
     
     logging.basicConfig(level = options.log_level,
                         format = '%(asctime)s - %(levelname)-8s - %(message)s', 
