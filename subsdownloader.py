@@ -11,39 +11,68 @@ import datetime
 import smtplib
 from email.mime.text import MIMEText
 
+import optparse
+
 import logging
 
-# Set full path to in and out queues
-config = {'opensubtitles': {'url': 'http://api.opensubtitles.org/xml-rpc',
-                            'user-agent': 'Kyheo SubsDown v0.1',
-                            'language': 'spa'},
-          'queues': {'in': 'q-in',
-                     'out': 'q-out',},
-          'quota': {'file': '/tmp/quota-file.json',
-                    'limit': 200,},
-          'email': {'notify': True,
-                    'from': 'foo@bar.com',
-                    'to' : ['foo@bar.com'],
-                    'smtp' : 'smtp.gmail.com',
-                    'port' : 587,
-                    'use_tls': True,
-                    'username': 'foo@bar.com',
-                    'password': 'secretpassword'
-                   },
-          'log-level': logging.DEBUG,
-          }
 
-logging.basicConfig(level = config['log-level'],
-                    format  = '%(asctime)s - %(levelname)-s - %(name)s - %(message)s', 
-                    datefmt = '%Y-%m-%d %H:%M:%S')
 log = logging.getLogger(__name__)
+
+
+def parse_options():
+    parser = optparse.OptionParser()
+    parser.add_option('--log-level', dest='log_level', type='string', default='DEBUG', help='Define log level (DEBUG, INFO, etc)')
+    parser.add_option('--config-module', dest='config_module', type='string', help='Load config from module (no py extension).')
+
+    dir_group = optparse.OptionGroup(parser, 'Directory options')
+    dir_group.add_option('--dir-in', dest='dir_in', default='q-in', help='Source directory')
+    dir_group.add_option('--dir-out', dest='dir_out', default='q-out', help='Destination directory')
+    parser.add_option_group(dir_group)
+
+    quota_group = optparse.OptionGroup(parser, 'Quota options')
+    quota_group.add_option('--quota-file', dest='quota_file', default='/tmp/quota-file.json', help='Track file for quota limits. Should persist over time')
+    quota_group.add_option('--quota-limit', dest='quota_limit', default=200, help='Max number of allowed downloads.')
+    parser.add_option_group(quota_group)
+
+    email_group = optparse.OptionGroup(parser, 'Email options')
+    email_group.add_option('--email-notify', dest='email_notify', action='store_true', default=False, help='Send notification email')
+    email_group.add_option('--email-from', dest='email_from', help='Your email')
+    email_group.add_option('--email-to', dest='email_to', action='append', help='Destination email. One per destination address.')
+    email_group.add_option('--email-smtp-server', dest='email_smtp', default='smtp.gmail.com', help='Relay server')
+    email_group.add_option('--email-smtp-port', dest='email_port', default=587, help='Server port')
+    email_group.add_option('--email-use-tls', dest='email_tls', action='store_true', default=True,  help='Use tls')
+    email_group.add_option('--email-user', dest='email_user', help='Server user')
+    email_group.add_option('--email-password', dest='email_password', help='Server password')
+    parser.add_option_group(email_group)
+
+    api_group = optparse.OptionGroup(parser, 'Open Subtitle options')
+    api_group.add_option('--api-url', dest='api_url', default='http://api.opensubtitles.org/xml-rpc', help='API url')
+    api_group.add_option('--api-user-agent', dest='api_user_agent', help='App User Agent', default='Kyheo SubsDown v0.1')
+    api_group.add_option('--api-language', dest='api_language', help='Subtitle download language', default='spa')
+    parser.add_option_group(api_group)
+
+    (options, args) = parser.parse_args()
+
+    if options.config_module:
+        try:
+            C = __import__(options.config_module)
+            parser.set_defaults(**C.options)
+            (options, args) = parser.parse_args()
+        except Exception, e:
+            print '- Error:', e
+            import sys
+            sys.exit(1)
+
+    return options
+
+
 
 
 class Quota(object):
 
-    def __init__(self, config):
+    def __init__(self, options):
         super(Quota, self).__init__()
-        self.config = config
+        self.options = options
 
         self.date = None
         self.qty = 0
@@ -54,7 +83,7 @@ class Quota(object):
     def initialize(self):
         try:
             log.debug('Loading quota information')
-            fp = open(self.config['file'], 'r')
+            fp = open(self.options.quota_file, 'r')
             data = json.load(fp)
             fp.close()
             self.qty = data['qty']
@@ -67,7 +96,7 @@ class Quota(object):
 
     def reached(self):
         today = datetime.date.today()
-        if self.date == today and self.qty >= self.config['limit']:
+        if self.date == today and self.qty >= self.options.quota_limit:
             return True
         return False
 
@@ -75,7 +104,7 @@ class Quota(object):
     def save(self):
         data = {'date': datetime.date.today().isoformat(),
                 'qty': self.qty}
-        fp = open(self.config['file'], 'w')
+        fp = open(self.options.quota_file, 'w')
         json.dump(data, fp)
         fp.close()
 
@@ -118,39 +147,39 @@ def hashFile(name):
 
 
 
-def send_notification_email(config, subs):
+def send_notification_email(options, subs):
     msg = 'The following subtitles were downloaded:\n\n'
     msg+= '\n'.join(['- %s' % (s, ) for s in subs])
     msg+= '\n\nRegards, Subsdownloader'
     email = MIMEText(msg)
     email['Subject'] = 'Subtitle Download Notification'
-    email['From'] = config['from']
-    email['To'] = ', '.join(config['to'])
+    email['From'] = options.email_from
+    email['To'] = ', '.join(options.email_to)
 
-    server = smtplib.SMTP(config['smtp'], config['port'])
-    if config['use_tls']:
+    server = smtplib.SMTP(options.email_smtp, options.email_port)
+    if options.email_tls:
         server.starttls()
-    server.login(config['username'], config['password'])
-    server.sendmail(config['from'], config['to'], email.as_string())
+    server.login(options.email_user, options.email_password)
+    server.sendmail(options.email_from, options.email_to, email.as_string())
     server.quit()
 
 
 
 
-def main(config):
-    files = os.listdir(config['queues']['in'])
+def main(options):
+    files = os.listdir(options.dir_in)
     if not files:
         log.debug('No files, ending')
         return
 
-    quota = Quota(config['quota'])
+    quota = Quota(options)
 
     if quota.reached():
         log.debug('Quota reached')
         return
 
-    server = xmlrpclib.Server(config['opensubtitles']['url']);
-    login = server.LogIn('', '', '', config['opensubtitles']['user-agent'])
+    server = xmlrpclib.Server(options.api_url);
+    login = server.LogIn('', '', '', options.api_user_agent)
     if login['status'] == '200 OK':
         token = login['token']
         log.debug('Logged in with token %s' % (token,))
@@ -162,12 +191,11 @@ def main(config):
     downloaded = []
     for file in files:
         try:
-            fname = os.path.join(config['queues']['in'], file)
+            fname = os.path.join(options.dir_in, file)
             log.debug('Processing ' + fname)
             hash, size = hashFile(fname)
             log.debug('Searching for ' + file)
-            lang = config['opensubtitles']['language']
-            data = server.SearchSubtitles(token, [{'sublanguageid': lang, 
+            data = server.SearchSubtitles(token, [{'sublanguageid': options.api_language, 
                                                    'moviehash': str(hash), 
                                                    'moviebytesize': str(size)}])
         except Exception,e:
@@ -191,11 +219,11 @@ def main(config):
                     body = gzip.GzipFile('', 'r', 0, sf_data).read()
 
                     # Write subtitle file
-                    dst_sub_name = os.path.join(config['queues']['out'], sub_fname)
+                    dst_sub_name = os.path.join(options.dir_out, sub_fname)
                     fp = open(dst_sub_name, 'wb')
                     fp.write(body)
                     fp.close()
-                    dst_file = os.path.join(config['queues']['out'], file)
+                    dst_file = os.path.join(options.dir_out, file)
                     shutil.move(fname, dst_file)
                     quota.qty += 1
                     downloaded.append(sub_fname)
@@ -212,14 +240,18 @@ def main(config):
         log.debug('Logged out')
 
     #Send notification email
-    if 'email' in config and config['email']['notify'] == True:
+    if options.email_notify == True:
         log.debug('Sending notification email')
-        send_notification_email(config['email'], downloaded)
+        send_notification_email(options, downloaded)
 
     quota.save()
 
 
 if __name__ == '__main__':
+    options = parse_options()
+    logging.basicConfig(level = options.log_level,
+                        format  = '%(asctime)s - %(levelname)-s - %(name)s - %(message)s', 
+                        datefmt = '%Y-%m-%d %H:%M:%S')
     log.info('Starting')
-    main(config)
+    main(options)
     log.info('Ending')
