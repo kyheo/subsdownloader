@@ -16,9 +16,6 @@ import optparse
 import logging
 
 
-log = logging.getLogger(__name__)
-
-
 def parse_options():
     parser = optparse.OptionParser()
     parser.add_option('--log-level', dest='log_level', type='string', default='DEBUG', help='Define log level (DEBUG, INFO, etc)')
@@ -63,6 +60,8 @@ def parse_options():
             import sys
             sys.exit(1)
 
+    options.log_level = getattr(logging, options.log_level)
+
     return options
 
 
@@ -82,7 +81,7 @@ class Quota(object):
 
     def initialize(self):
         try:
-            log.debug('Loading quota information')
+            logging.debug('Loading quota information')
             fp = open(self.options.quota_file, 'r')
             data = json.load(fp)
             fp.close()
@@ -90,7 +89,7 @@ class Quota(object):
             self.date = datetime.datetime.strptime(data['date'], '%Y-%m-%d')
             self.date = self.date.date()
         except IOError:
-            log.debug('  No quota file, creating one')
+            logging.debug('  No quota file, creating one')
             self.save()
 
 
@@ -169,22 +168,23 @@ def send_notification_email(options, subs):
 def main(options):
     files = os.listdir(options.dir_in)
     if not files:
-        log.debug('No files, ending')
+        logging.debug('No files, ending')
         return
+
 
     quota = Quota(options)
 
     if quota.reached():
-        log.debug('Quota reached')
+        logging.debug('Quota reached')
         return
 
     server = xmlrpclib.Server(options.api_url);
     login = server.LogIn('', '', '', options.api_user_agent)
     if login['status'] == '200 OK':
         token = login['token']
-        log.debug('Logged in with token %s' % (token,))
+        logging.debug('Logged in with token %s' % (token,))
     else:
-        log.error('Couldn\'t log in.')
+        logging.error('Couldn\'t log in.')
         return
 
     #Search
@@ -192,14 +192,14 @@ def main(options):
     for file in files:
         try:
             fname = os.path.join(options.dir_in, file)
-            log.debug('Processing ' + fname)
+            logging.debug('Processing ' + fname)
             hash, size = hashFile(fname)
-            log.debug('Searching for ' + file)
+            logging.debug('Searching for ' + file)
             data = server.SearchSubtitles(token, [{'sublanguageid': options.api_language, 
                                                    'moviehash': str(hash), 
                                                    'moviebytesize': str(size)}])
         except Exception,e:
-            log.error(str(e))
+            logging.error(str(e))
             # Lets try with the next file if any.
             continue
 
@@ -210,7 +210,7 @@ def main(options):
                     filename, fileext = os.path.splitext(file)
                     sub_fname = '%s.%s' % (filename, d['SubFormat'])
 
-                    log.info('Downloading %s' % (sub_fname,))
+                    logging.info('Downloading %s' % (sub_fname,))
 
                     sub_data = server.DownloadSubtitles(token,
                                                         [d['IDSubtitleFile']])
@@ -230,18 +230,18 @@ def main(options):
                     # Break for, don't want to loop over the next subs
                     break
                 except Exception, e:
-                    log.error(str(e))
+                    logging.error(str(e))
         else:
-            log.debug(' Nothing found')
+            logging.debug(' Nothing found')
 
     #LogOut
     logout = server.LogOut(token)
     if logout['status'] == '200 OK':
-        log.debug('Logged out')
+        logging.debug('Logged out')
 
     #Send notification email
     if options.email_notify == True:
-        log.debug('Sending notification email')
+        logging.debug('Sending notification email')
         send_notification_email(options, downloaded)
 
     quota.save()
@@ -250,8 +250,8 @@ def main(options):
 if __name__ == '__main__':
     options = parse_options()
     logging.basicConfig(level = options.log_level,
-                        format  = '%(asctime)s - %(levelname)-s - %(name)s - %(message)s', 
+                        format = '%(asctime)s - %(levelname)-8s - %(message)s', 
                         datefmt = '%Y-%m-%d %H:%M:%S')
-    log.info('Starting')
+    logging.info('Starting')
     main(options)
-    log.info('Ending')
+    logging.info('Ending')
