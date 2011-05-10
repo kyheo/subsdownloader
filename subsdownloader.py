@@ -243,6 +243,9 @@ def main(options):
         if data['data']:
             for d in data['data']:
                 try:
+                    if quota.reached():
+                        logging.info('Quota reached, ending')
+                        break
                     # TODO: Catch exceptions individually
                     dirs, fname = os.path.split(file)
                     filename, fileext = os.path.splitext(fname)
