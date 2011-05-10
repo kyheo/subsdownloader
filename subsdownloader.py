@@ -10,6 +10,7 @@ import json
 import datetime
 import smtplib
 from email.mime.text import MIMEText
+import re
 
 import optparse
 
@@ -18,17 +19,20 @@ import logging
 
 def parse_options():
     parser = optparse.OptionParser()
-    parser.add_option('--log-level', dest='log_level', type='string', default='DEBUG', help='Define log level (DEBUG, INFO, etc)')
-    parser.add_option('--config-module', dest='config_module', type='string', help='Load config from module (no py extension).')
+    parser.add_option('--log-level', type=str, dest='log_level', default='DEBUG', help='Define log level (DEBUG, INFO, etc)'       )
+    parser.add_option('--config-module', type=str, dest='config_module', default=None, help='Load config from module (no py extension).')
 
     dir_group = optparse.OptionGroup(parser, 'Directory options')
-    dir_group.add_option('--dir-in', dest='dir_in', default='q-in', help='Source directory')
+    dir_group.add_option('-r', '--recursive', dest='dir_recursive', action='store_true', default=False, help='Recursive look for files.')
+    dir_group.add_option('--exclude', type=str, dest='dir_exclude', action='append', default=[], help='Exclude regular expressions')
+
+    dir_group.add_option('--dir-in', dest='dir_in', default='q-in/*', help='Source directory')
     dir_group.add_option('--dir-out', dest='dir_out', default='q-out', help='Destination directory')
     parser.add_option_group(dir_group)
 
     quota_group = optparse.OptionGroup(parser, 'Quota options')
-    quota_group.add_option('--quota-file', dest='quota_file', default='/tmp/quota-file.json', help='Track file for quota limits. Should persist over time')
-    quota_group.add_option('--quota-limit', dest='quota_limit', default=200, help='Max number of allowed downloads.')
+    quota_group.add_option('--quota-file' , type=str, dest='quota_file' , default='/tmp/quota-file.json', help='Track file for quota limits. Should persist over time')
+    quota_group.add_option('--quota-limit', type=int, dest='quota_limit', default=200                   , help='Max number of allowed downloads.')
     parser.add_option_group(quota_group)
 
     email_group = optparse.OptionGroup(parser, 'Email options')
@@ -61,9 +65,42 @@ def parse_options():
             sys.exit(1)
 
     options.log_level = getattr(logging, options.log_level)
+    
+    logging.basicConfig(level = options.log_level,
+                        format = '%(asctime)s - %(levelname)-8s - %(message)s', 
+                        datefmt = '%Y-%m-%d %H:%M:%S')
 
     return options
 
+
+
+
+def get_filenames(options, directory=None):
+    if directory is None:
+        directory = options.dir_in
+    logging.debug('Getting files')
+
+    reg_exps = []
+    for pattern in options.dir_exclude:
+        reg_exps.append(re.compile(pattern))
+
+    file_list = []
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            match = False
+            fname = os.path.join(root, file)
+            for reg_exp in reg_exps:
+                if reg_exp.search(fname):
+                    match = True
+                    break
+            if not match:
+                file_list.append(fname)
+
+        if not options.dir_recursive:
+            break
+
+    logging.info('%d files found' % (len(file_list)))
+    return file_list
 
 
 
@@ -166,16 +203,15 @@ def send_notification_email(options, subs):
 
 
 def main(options):
-    files = os.listdir(options.dir_in)
+    files = get_filenames(options) 
     if not files:
-        logging.debug('No files, ending')
+        logging.info('No files, ending')
         return
 
-
     quota = Quota(options)
-
+    
     if quota.reached():
-        logging.debug('Quota reached')
+        logging.info('Quota reached, ending')
         return
 
     server = xmlrpclib.Server(options.api_url);
@@ -191,10 +227,8 @@ def main(options):
     downloaded = []
     for file in files:
         try:
-            fname = os.path.join(options.dir_in, file)
-            logging.debug('Processing ' + fname)
-            hash, size = hashFile(fname)
-            logging.debug('Searching for ' + file)
+            logging.info('Processing ' + file)
+            hash, size = hashFile(file)
             data = server.SearchSubtitles(token, [{'sublanguageid': options.api_language, 
                                                    'moviehash': str(hash), 
                                                    'moviebytesize': str(size)}])
@@ -207,26 +241,38 @@ def main(options):
             for d in data['data']:
                 try:
                     # TODO: Catch exceptions individually
-                    filename, fileext = os.path.splitext(file)
+                    dirs, fname = os.path.split(file)
+                    filename, fileext = os.path.splitext(fname)
+                    
                     sub_fname = '%s.%s' % (filename, d['SubFormat'])
 
+                    # Download subtitle
                     logging.info('Downloading %s' % (sub_fname,))
-
                     sub_data = server.DownloadSubtitles(token,
                                                         [d['IDSubtitleFile']])
                     sub_content = base64.b64decode(sub_data['data'][0]['data']) 
                     sf_data = cStringIO.StringIO(sub_content)
                     body = gzip.GzipFile('', 'r', 0, sf_data).read()
 
+                    # Create output dir
+                    out_dirs = dirs.replace(options.dir_in, options.dir_out, 1)
+                    if options.dir_in != options.dir_out:
+                        logging.debug('Creating out directory')
+                        if not os.path.exists(out_dirs):
+                            os.makedirs(out_dirs)
+
+                        # Move video file 
+                        dst_file = os.path.join(out_dirs, fname)
+                        shutil.move(file, dst_file)
+                        quota.qty += 1
+                        downloaded.append(sub_fname)
+
                     # Write subtitle file
-                    dst_sub_name = os.path.join(options.dir_out, sub_fname)
+                    dst_sub_name = os.path.join(out_dirs, sub_fname)
                     fp = open(dst_sub_name, 'wb')
                     fp.write(body)
                     fp.close()
-                    dst_file = os.path.join(options.dir_out, file)
-                    shutil.move(fname, dst_file)
-                    quota.qty += 1
-                    downloaded.append(sub_fname)
+
                     # Break for, don't want to loop over the next subs
                     break
                 except Exception, e:
@@ -249,9 +295,6 @@ def main(options):
 
 if __name__ == '__main__':
     options = parse_options()
-    logging.basicConfig(level = options.log_level,
-                        format = '%(asctime)s - %(levelname)-8s - %(message)s', 
-                        datefmt = '%Y-%m-%d %H:%M:%S')
     logging.info('Starting')
     main(options)
     logging.info('Ending')
