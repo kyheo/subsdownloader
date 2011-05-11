@@ -9,10 +9,6 @@ to get a hash from it, later version will work with name lists.
 
 .. _`opensubtitles.org`: http://www.opensubtitles.org
 
-Todo
-====
-* Send emails when subtitles get downloaded.
-
 Contact
 =======
 Martín Marrese - marrese@gmail.com
