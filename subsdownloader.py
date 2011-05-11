@@ -11,6 +11,7 @@ import datetime
 import smtplib
 from email.mime.text import MIMEText
 import re
+import hashlib
 
 import optparse
 
@@ -25,7 +26,7 @@ def parse_options():
     dir_group = optparse.OptionGroup(parser, 'Directory options')
     dir_group.add_option('-r', '--recursive', dest='dir_recursive', action='store_true', default=False, help='Recursive look for files.')
     dir_group.add_option('--exclude', type=str, dest='dir_exclude', action='append', default=[], help='Exclude regular expressions')
-
+    dir_group.add_option('--exclude-subs-dir', type=str, dest='dir_subs_exclude', help='Exclude subs in this directory, buggy ones.')
     dir_group.add_option('--dir-in', dest='dir_in', default='q-in', help='Source directory')
     dir_group.add_option('--dir-out', dest='dir_out', help='Destination directory')
     parser.add_option_group(dir_group)
@@ -105,6 +106,21 @@ def get_filenames(options, directory=None):
     logging.info('%d files found' % (len(file_list)))
     return file_list
 
+
+
+
+def get_excluded_subs(options):
+    logging.debug('Looking for excluded subs')
+    excluded_subs = []
+    if options.dir_subs_exclude:
+        for file in os.listdir(options.dir_subs_exclude):
+            fp = open(os.path.join(options.dir_subs_exclude, file), 'r')
+            h = hashlib.md5()
+            h.update(fp.read())
+            fp.close()
+            excluded_subs.append(h.hexdigest())
+    logging.info('%d excluded subs.' % (len(excluded_subs),))
+    return excluded_subs
 
 
 class Quota(object):
@@ -217,6 +233,8 @@ def main(options):
         logging.info('Quota reached, ending')
         return
 
+    excluded_subs = get_excluded_subs(options)
+
     server = xmlrpclib.Server(options.api_url);
     login = server.LogIn('', '', '', options.api_user_agent)
     if login['status'] == '200 OK':
@@ -242,6 +260,9 @@ def main(options):
 
         if data['data']:
             for d in data['data']:
+                if d['SubHash'] in excluded_subs:
+                    logging.debug('Buggy sub, next !')
+                    continue
                 try:
                     if quota.reached():
                         logging.info('Quota reached, ending')
