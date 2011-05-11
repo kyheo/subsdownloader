@@ -20,38 +20,33 @@ import logging
 
 def parse_options():
     parser = optparse.OptionParser()
-    parser.add_option('--log-level', type=str, dest='log_level', default='DEBUG', help='Define log level (DEBUG, INFO, etc)'       )
-    parser.add_option('--config-module', type=str, dest='config_module', default=None, help='Load config from module (no py extension).')
+    parser.add_option('--log-level', type='string', dest='log_level', default='DEBUG', help='Define log level (DEBUG, INFO, etc).')
+    parser.add_option('--config-module', type='string', dest='config_module', default=None, help='Load config from module (no py extension).')
+    parser.add_option('--lang', type='string', dest='lang', default='spa', help='Subtitle download language.')
 
     dir_group = optparse.OptionGroup(parser, 'Directory options')
-    dir_group.add_option('-r', '--recursive', dest='dir_recursive', action='store_true', default=False, help='Recursive look for files.')
-    dir_group.add_option('--exclude', type=str, dest='dir_exclude', action='append', default=[], help='Exclude regular expressions')
-    dir_group.add_option('--exclude-subs-dir', type=str, dest='dir_subs_exclude', help='Exclude subs in this directory, buggy ones.')
-    dir_group.add_option('--dir-in', dest='dir_in', default='q-in', help='Source directory')
-    dir_group.add_option('--dir-out', dest='dir_out', help='Destination directory')
+    dir_group.add_option('-r', '--recursive', dest='recursive', action='store_true', default=False, help='Recursively look for files.')
+    dir_group.add_option('--exclude', type='string', dest='exclude', action='append', default=[], help='Exclude files regular expressions. One per regular expression.')
+    dir_group.add_option('--exclude-subs', type='string', dest='exclude_subs', help='Exclude subs in this directory.')
+    dir_group.add_option('--source', type='string', dest='source', default='q-in', help='Source directory.')
+    dir_group.add_option('--dest', type='string', dest='dest', help='Destination directory. Default --source.')
     parser.add_option_group(dir_group)
 
     quota_group = optparse.OptionGroup(parser, 'Quota options')
-    quota_group.add_option('--quota-file' , type=str, dest='quota_file' , default='/tmp/quota-file.json', help='Track file for quota limits. Should persist over time')
-    quota_group.add_option('--quota-limit', type=int, dest='quota_limit', default=200                   , help='Max number of allowed downloads.')
+    quota_group.add_option('--quota-file', type='string', dest='quota_file', default='/tmp/quota-file.json', help='Track file for quota limits. Should persist over time.')
+    quota_group.add_option('--quota-limit', type='int', dest='quota_limit', default=200, help='Max number of allowed downloads. Change this at your own risk.')
     parser.add_option_group(quota_group)
 
     email_group = optparse.OptionGroup(parser, 'Email options')
-    email_group.add_option('--email-notify', dest='email_notify', action='store_true', default=False, help='Send notification email')
-    email_group.add_option('--email-from', dest='email_from', help='Your email')
-    email_group.add_option('--email-to', dest='email_to', action='append', help='Destination email. One per destination address.')
-    email_group.add_option('--email-smtp-server', dest='email_smtp', default='smtp.gmail.com', help='Relay server')
-    email_group.add_option('--email-smtp-port', dest='email_port', default=587, help='Server port')
-    email_group.add_option('--email-use-tls', dest='email_tls', action='store_true', default=True,  help='Use tls')
-    email_group.add_option('--email-user', dest='email_user', help='Server user')
-    email_group.add_option('--email-password', dest='email_password', help='Server password')
+    email_group.add_option('--notify', dest='notify', action='store_true', default=False, help='Notification email on download.')
+    email_group.add_option('--from', type='string', dest='from_', help='Your email.')
+    email_group.add_option('--to', type='string', dest='to', action='append', help='Destination email. One per address.')
+    email_group.add_option('--smtp-server', type='string', dest='smtp_server', default='smtp.gmail.com', help='SMTP server.')
+    email_group.add_option('--smtp-port', type='string', dest='smtp_port', default=587, help='SMTP Server port.')
+    email_group.add_option('--smtp-user', type='string', dest='smtp_user', help='Server user.')
+    email_group.add_option('--smtp-pass', type='string', dest='smtp_pass', help='Server password.')
+    email_group.add_option('--use-tls', dest='smtp_tls', action='store_true', default=True, help='Use tls.')
     parser.add_option_group(email_group)
-
-    api_group = optparse.OptionGroup(parser, 'Open Subtitle options')
-    api_group.add_option('--api-url', dest='api_url', default='http://api.opensubtitles.org/xml-rpc', help='API url')
-    api_group.add_option('--api-user-agent', dest='api_user_agent', help='App User Agent', default='Kyheo SubsDown v0.1')
-    api_group.add_option('--api-language', dest='api_language', help='Subtitle download language', default='spa')
-    parser.add_option_group(api_group)
 
     (options, args) = parser.parse_args()
 
@@ -67,8 +62,12 @@ def parse_options():
 
     options.log_level = getattr(logging, options.log_level)
 
-    if not options.dir_out:
-        options.dir_out = options.dir_in
+    # Hardcoded values, shouldn't change at all
+    options.api_url = 'http://api.opensubtitles.org/xml-rpc'
+    options.api_user_agent = 'Kyheo SubsDown v0.1'
+
+    if not options.dest:
+        options.dest = options.source
     
     logging.basicConfig(level = options.log_level,
                         format = '%(asctime)s - %(levelname)-8s - %(message)s', 
@@ -79,11 +78,11 @@ def parse_options():
 
 def get_filenames(options, directory=None):
     if directory is None:
-        directory = options.dir_in
+        directory = options.source
     logging.debug('Getting files')
 
     reg_exps = []
-    for pattern in options.dir_exclude:
+    for pattern in options.exclude:
         reg_exps.append(re.compile(pattern))
 
     file_list = []
@@ -98,7 +97,7 @@ def get_filenames(options, directory=None):
             if not match:
                 file_list.append(fname)
 
-        if not options.dir_recursive:
+        if not options.recursive:
             break
 
     logging.info('%d files found' % (len(file_list)))
@@ -108,9 +107,9 @@ def get_filenames(options, directory=None):
 def get_excluded_subs(options):
     logging.debug('Looking for excluded subs')
     excluded_subs = []
-    if options.dir_subs_exclude:
-        for file in os.listdir(options.dir_subs_exclude):
-            fp = open(os.path.join(options.dir_subs_exclude, file), 'r')
+    if options.exclude_subs:
+        for file in os.listdir(options.exclude_subs):
+            fp = open(os.path.join(options.exclude_subs, file), 'r')
             h = hashlib.md5()
             h.update(fp.read())
             fp.close()
@@ -159,14 +158,14 @@ def send_notification_email(options, subs):
     msg+= '\n\nRegards, Subsdownloader'
     email = MIMEText(msg)
     email['Subject'] = 'Subtitle Download Notification'
-    email['From'] = options.email_from
-    email['To'] = ', '.join(options.email_to)
+    email['From'] = options.from_
+    email['To'] = ', '.join(options.to)
 
-    server = smtplib.SMTP(options.email_smtp, options.email_port)
-    if options.email_tls:
+    server = smtplib.SMTP(options.smtp_server, options.smtp_port)
+    if options.smtp_tls:
         server.starttls()
-    server.login(options.email_user, options.email_password)
-    server.sendmail(options.email_from, options.email_to, email.as_string())
+    server.login(options.smtp_user, options.smtp_pass)
+    server.sendmail(options.from_, options.to, email.as_string())
     server.quit()
 
 
@@ -236,7 +235,7 @@ def main(options):
         try:
             logging.info('Processing ' + file)
             hash, size = hashFile(file)
-            data = server.SearchSubtitles(token, [{'sublanguageid': options.api_language, 
+            data = server.SearchSubtitles(token, [{'sublanguageid': options.lang, 
                                                    'moviehash': str(hash), 
                                                    'moviebytesize': str(size)}])
         except Exception,e:
@@ -268,8 +267,8 @@ def main(options):
                     body = gzip.GzipFile('', 'r', 0, sf_data).read()
 
                     # Create output dir
-                    out_dirs = dirs.replace(options.dir_in, options.dir_out, 1)
-                    if options.dir_in != options.dir_out:
+                    out_dirs = dirs.replace(options.source, options.dest, 1)
+                    if options.source != options.dest:
                         logging.debug('Creating out directory')
                         if not os.path.exists(out_dirs):
                             os.makedirs(out_dirs)
@@ -299,7 +298,7 @@ def main(options):
         logging.debug('Logged out')
 
     #Send notification email
-    if options.email_notify == True:
+    if options.notify == True:
         logging.debug('Sending notification email')
         send_notification_email(options, downloaded)
 
