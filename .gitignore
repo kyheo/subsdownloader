@@ -1,2 +1,5 @@
 *.pyc
 config_kyheo.py
+clean.sh
+excluded_subs/
+q-in/
