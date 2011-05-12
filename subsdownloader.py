@@ -15,6 +15,8 @@ import hashlib
 
 import optparse
 
+import glob
+
 import logging
 
 
@@ -26,10 +28,11 @@ def parse_options():
 
     dir_group = optparse.OptionGroup(parser, 'Directory options')
     dir_group.add_option('-r', '--recursive', dest='recursive', action='store_true', default=False, help='Recursively look for files.')
-    dir_group.add_option('--exclude', type='string', dest='exclude', action='append', default=[], help='Exclude files regular expressions. One per regular expression.')
+    dir_group.add_option('--exclude', type='string', dest='exclude', action='append', default=[], help='Exclude files regular expressions. (Multiple)')
     dir_group.add_option('--exclude-subs', type='string', dest='exclude_subs', help='Exclude subs in this directory.')
     dir_group.add_option('--source', type='string', dest='source', default='q-in', help='Source directory.')
     dir_group.add_option('--dest', type='string', dest='dest', help='Destination directory. Default --source.')
+    dir_group.add_option('--regex', type='string', dest='regex', action='append', default=[], help='Glob sources regex. This overrides --source. (Multiple)')
     parser.add_option_group(dir_group)
 
     quota_group = optparse.OptionGroup(parser, 'Quota options')
@@ -40,7 +43,7 @@ def parse_options():
     email_group = optparse.OptionGroup(parser, 'Email options')
     email_group.add_option('--notify', dest='notify', action='store_true', default=False, help='Notification email on download.')
     email_group.add_option('--from', type='string', dest='from_', help='Your email.')
-    email_group.add_option('--to', type='string', dest='to', action='append', help='Destination email. One per address.')
+    email_group.add_option('--to', type='string', dest='to', action='append', help='Destination email. (Multiple)')
     email_group.add_option('--smtp-server', type='string', dest='smtp_server', default='smtp.gmail.com', help='SMTP server.')
     email_group.add_option('--smtp-port', type='string', dest='smtp_port', default=587, help='SMTP Server port.')
     email_group.add_option('--smtp-user', type='string', dest='smtp_user', help='Server user.')
@@ -76,29 +79,31 @@ def parse_options():
     return options
 
 
-def get_filenames(options, directory=None):
-    if directory is None:
-        directory = options.source
+def get_filenames(options):
     logging.debug('Getting files')
 
-    reg_exps = []
+    exclude_regex = []
     for pattern in options.exclude:
-        reg_exps.append(re.compile(pattern))
+        exclude_regex.append(re.compile(pattern))
 
     file_list = []
-    for root, dirs, files in os.walk(directory):
-        for file in files:
-            match = False
-            fname = os.path.join(root, file)
-            for reg_exp in reg_exps:
-                if reg_exp.search(fname):
-                    match = True
-                    break
-            if not match:
-                file_list.append(fname)
+    if options.regex:
+        for regex in options.regex:
+            file_list += [ file for file in glob.glob(regex) if os.path.isfile(file) ]
+    else:
+        for root, dirs, files in os.walk(options.source):
+            for file in files:
+                match = False
+                fname = os.path.join(root, file)
+                for reg_exp in exclude_regex:
+                    if reg_exp.search(fname):
+                        match = True
+                        break
+                if not match:
+                    file_list.append(fname)
 
-        if not options.recursive:
-            break
+            if not options.recursive:
+                break
 
     logging.info('%d files found' % (len(file_list)))
     return file_list
@@ -267,17 +272,20 @@ def main(options):
                     body = gzip.GzipFile('', 'r', 0, sf_data).read()
 
                     # Create output dir
-                    out_dirs = dirs.replace(options.source, options.dest, 1)
-                    if options.source != options.dest:
+                    if options.dest:
+                        out_dirs = options.dest
+                    else:
+                        out_dirs = dirs
+ 
+                    if not os.path.exists(out_dirs):
                         logging.debug('Creating out directory')
-                        if not os.path.exists(out_dirs):
-                            os.makedirs(out_dirs)
+                        os.makedirs(out_dirs)
 
-                        # Move video file 
-                        dst_file = os.path.join(out_dirs, fname)
-                        shutil.move(file, dst_file)
-                        quota.qty += 1
-                        downloaded.append(sub_fname)
+                    # Move video file 
+                    dst_file = os.path.join(out_dirs, fname)
+                    shutil.move(file, dst_file)
+                    quota.qty += 1
+                    downloaded.append(sub_fname)
 
                     # Write subtitle file
                     dst_sub_name = os.path.join(out_dirs, sub_fname)
@@ -290,7 +298,7 @@ def main(options):
                 except Exception, e:
                     logging.error(str(e))
         else:
-            logging.debug(' Nothing found')
+            logging.debug('Nothing found')
 
     #LogOut
     logout = server.LogOut(token)
