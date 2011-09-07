@@ -5,34 +5,41 @@ import os
 import struct
 import hashlib
 
-def get_filenames(options):
-    logging.debug('Getting files')
+class Files(object):
 
-    exclude_regex = []
-    for pattern in options.exclude:
-        exclude_regex.append(re.compile(pattern))
+    def __init__(self, options):
+        self.options = options
 
-    file_list = []
-    if options.regex:
-        for regex in options.regex:
-            file_list += [ file for file in glob.glob(regex) if os.path.isfile(file) ]
-    else:
-        for root, dirs, files in os.walk(options.source):
-            for file in files:
-                match = False
-                fname = os.path.join(root, file)
-                for reg_exp in exclude_regex:
-                    if reg_exp.search(fname):
-                        match = True
-                        break
-                if not match:
-                    file_list.append(fname)
+    def get(self):
+        logging.debug('Getting files')
 
-            if not options.recursive:
-                break
+        exclude_regex = []
+        for pattern in self.options.exclude:
+            exclude_regex.append(re.compile(pattern))
 
-    logging.info('%d files found' % (len(file_list)))
-    return file_list
+        file_list = []
+        if self.options.regex:
+            for regex in self.options.regex:
+                for file_ in glob.glob(regex):
+                    if os.path.isfile(file_):
+                        file_list.append(file_)
+        else:
+            for root, dirs, files in os.walk(self.options.source):
+                for file_ in files:
+                    match = False
+                    fname = os.path.join(root, file_)
+                    for reg_exp in exclude_regex:
+                        if reg_exp.search(fname):
+                            match = True
+                            break
+                    if not match:
+                        file_list.append(fname)
+
+                if not self.options.recursive:
+                    break
+
+        logging.info('%d files found' % (len(file_list)))
+        return file_list
 
 
 def get_excluded_subs(options):

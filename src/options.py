@@ -54,9 +54,11 @@ def parse_options():
     if not options.dest:
         options.dest = options.source
     
-    logging.basicConfig(level = options.log_level,
-                        format = '%(asctime)s - %(levelname)-8s - %(message)s', 
-                        datefmt = '%Y-%m-%d %H:%M:%S')
+    logging.basicConfig(
+        level   = options.log_level,
+        format  = '%(asctime)s - %(levelname)s - %(filename)s:%(lineno)s - %(message)s',
+        datefmt = '%Y-%m-%d %H:%M:%S',
+        )
 
     return options
 

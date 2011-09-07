@@ -1,52 +1,39 @@
 #! /usr/bin/env python
 import os
 import shutil
-import base64
-import xmlrpclib
-import cStringIO
-import gzip
 
 import logging
 
 from src import options
-from src import quota as quota_lib
+from src import quota as quota_utils
 from src import files as files_utils
 from src import emails
-
+from src import opensubtitles
 
 def main(options):
-    quota = quota_lib.Quota(options)
+    quota = quota_utils.Quota(options)
     if quota.reached():
-        logging.info('Quota reached, ending')
+        logging.error('Quota reached, ending !.')
         return
 
-    files = files_utils.get_filenames(options) 
+    files = files_utils.get_filenames(options)
     if not files:
         logging.info('No files, ending')
         return
 
     excluded_subs = files_utils.get_excluded_subs(options)
-
-    server = xmlrpclib.Server(options.api_url);
-    login = server.LogIn('', '', '', options.api_user_agent)
-    if login['status'] == '200 OK':
-        token = login['token']
-        logging.debug('Logged in with token %s' % (token,))
-    else:
-        logging.error('Couldn\'t log in.')
-        return
+    
+    server = opensubtitles.Server(options)
+    server.connect()
 
     #Search
     downloaded = []
-    for file in files:
+    for file_ in files:
+        logging.info('Processing ' + file_)
         try:
-            logging.info('Processing ' + file)
-            hash, size = files_utils.hashFile(file)
-            data = server.SearchSubtitles(token, [{'sublanguageid': options.lang, 
-                                                   'moviehash': str(hash), 
-                                                   'moviebytesize': str(size)}])
+            data = server.search(options.lang, file_)
         except Exception,e:
-            logging.error(str(e))
+            logging.exception(e)
             # Lets try with the next file if any.
             continue
 
@@ -60,18 +47,14 @@ def main(options):
                         logging.info('Quota reached, ending')
                         break
                     # TODO: Catch exceptions individually
-                    dirs, fname = os.path.split(file)
+                    dirs, fname = os.path.split(file_)
                     filename, fileext = os.path.splitext(fname)
                     
                     sub_fname = '%s.%s' % (filename, d['SubFormat'])
 
                     # Download subtitle
                     logging.info('Downloading %s' % (sub_fname,))
-                    sub_data = server.DownloadSubtitles(token,
-                                                        [d['IDSubtitleFile']])
-                    sub_content = base64.b64decode(sub_data['data'][0]['data']) 
-                    sf_data = cStringIO.StringIO(sub_content)
-                    body = gzip.GzipFile('', 'r', 0, sf_data).read()
+                    body = server.download(d['IDSubtitleFile'])
 
                     # Create output dir
                     if options.dest:
@@ -85,7 +68,7 @@ def main(options):
 
                     # Move video file 
                     dst_file = os.path.join(out_dirs, fname)
-                    shutil.move(file, dst_file)
+                    shutil.move(file_, dst_file)
                     quota.qty += 1
                     downloaded.append(sub_fname)
 
@@ -98,14 +81,12 @@ def main(options):
                     # Break for, don't want to loop over the next subs
                     break
                 except Exception, e:
-                    logging.error(str(e))
+                    logging.exception(e)
         else:
             logging.debug('Nothing found')
 
     #LogOut
-    logout = server.LogOut(token)
-    if logout['status'] == '200 OK':
-        logging.debug('Logged out')
+    server.disconnect()
 
     #Send notification email
     if options.notify == True:
