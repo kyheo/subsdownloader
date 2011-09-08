@@ -3,8 +3,28 @@ import xmlrpclib
 import base64
 import cStringIO
 import gzip
+import struct
+import os
 
-from src import files as files_utils
+
+class Subtitle(object):
+
+    def __init__(self, data, server):
+        self.data = data
+        self.server = server
+
+    def download(self):
+        return self.server.download(self.data['IDSubtitleFile'])
+
+    def get_format(self):
+        return self.data['SubFormat']
+
+    def get_hash(self):
+        return self.data['SubHash']
+
+    def __repr__(self):
+        return self.data['SubFileName']
+
 
 class Server(object):
 
@@ -13,14 +33,12 @@ class Server(object):
         self.server = None
         self.token = None
 
-
     def connect(self):
         self.server = xmlrpclib.Server(self.options.api_url);
         login = self.server.LogIn('', '', '', self.options.api_user_agent)
-        if login['status'] == '200 OK':
+        if login['status'] != '200 OK':
             raise Exception("Couldn't login.")
         self.token = login['token']
-
 
     def disconnect(self):
         logout = self.server.LogOut(self.token)
@@ -28,15 +46,17 @@ class Server(object):
             # We won't throw an exception because the script ended "properly".
             logging.error("Error when logging out.")
 
-
     def search(self, lang, file_):
-        hash_, size = files_utils.hashFile(file_)
+        subtitles = []
+        hash_, size = self.hashFile(file_.path)
         data = self.server.SearchSubtitles(self.token, 
                                            [{'sublanguageid': lang,
                                              'moviehash': str(hash_), 
                                              'moviebytesize': str(size)}])
-        return data
-
+        if data['data']:
+            for d in data['data']:
+                subtitles.append(Subtitle(d, self))
+        return subtitles
 
     def download(self, sub_id):
         sub_data = self.server.DownloadSubtitles(self.token, [sub_id])
@@ -44,3 +64,35 @@ class Server(object):
         sf_data = cStringIO.StringIO(sub_content)
         return gzip.GzipFile('', 'r', 0, sf_data).read()
 
+    def hashFile(self, name):
+        """Opensubtitles hash function modified to return not only the hash but
+        also the file size.
+        http://trac.opensubtitles.org/projects/opensubtitles/wiki/HashSourceCodes#Python
+        """
+        longlongformat = 'q'  # long long 
+        bytesize = struct.calcsize(longlongformat) 
+            
+        f = open(name, "rb") 
+            
+        filesize = os.path.getsize(name) 
+        hash = filesize 
+            
+        if filesize < 65536 * 2: 
+            raise Exception("SizeError")
+         
+        for x in range(65536/bytesize): 
+            buffer = f.read(bytesize) 
+            (l_value,)= struct.unpack(longlongformat, buffer)  
+            hash += l_value 
+            hash = hash & 0xFFFFFFFFFFFFFFFF #to remain as 64bit number  
+
+        f.seek(max(0,filesize-65536),0) 
+        for x in range(65536/bytesize): 
+            buffer = f.read(bytesize) 
+            (l_value,)= struct.unpack(longlongformat, buffer)  
+            hash += l_value 
+            hash = hash & 0xFFFFFFFFFFFFFFFF 
+         
+        f.close() 
+        returnedhash =  "%016x" % hash 
+        return returnedhash, filesize 

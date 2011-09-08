@@ -1,23 +1,76 @@
-import logging
-import re
 import glob
 import os
-import struct
 import hashlib
+import re
+import shutil
 
-class Files(object):
+
+def get_excluded_subs(options):
+    excluded_subs = []
+    if options.exclude_subs:
+        for file in os.listdir(options.exclude_subs):
+            fp = open(os.path.join(options.exclude_subs, file), 'r')
+            h = hashlib.md5()
+            h.update(fp.read())
+            fp.close()
+            excluded_subs.append(h.hexdigest())
+    return excluded_subs
+
+
+class MediaFile(object):
+    '''Media file'''
+
+    def __init__(self, path, options):
+        self.options = options
+        self.path = path
+        self.dir, self.filename = os.path.split(self.path)
+        self.name, self.ext = os.path.splitext(self.filename)
+
+    def __repr__(self):
+        return self.path
+
+    def save(self, sub_body, sub_format):
+        # Create out dirs
+        out_dir = getattr(self.options, 'dest', self.dir)
+        if not os.path.exists(out_dir):
+            os.makedirs(out_dir)
+        # Move media file to dest dir
+        dst_file = os.path.join(out_dir, self.filename)
+        shutil.move(self.path, dst_file)
+        # Save subtitle file
+        self._save_subtitle(sub_body, sub_format, out_dir)
+
+    def _save_subtitle(self, body, format_, out_dir):
+        fname = '%s.%s' % (self.name, format_)
+        dst_sub_name = os.path.join(out_dir, fname)
+        fp = open(dst_sub_name, 'wb')
+        fp.write(body)
+        fp.close()
+
+ 
+class MediaFiles(object):
+    '''Files iterator'''
 
     def __init__(self, options):
         self.options = options
+        self.index = 0
+        self.data = self._load()
 
-    def get(self):
-        logging.debug('Getting files')
+    def __iter__(self):
+        return self
 
+    def next(self):
+        if self.index == len(self.data):
+            raise StopIteration
+        entry = self.data[self.index]
+        self.index += 1
+        return entry
+
+    def _load(self):
+        file_list = []
         exclude_regex = []
         for pattern in self.options.exclude:
             exclude_regex.append(re.compile(pattern))
-
-        file_list = []
         if self.options.regex:
             for regex in self.options.regex:
                 for file_ in glob.glob(regex):
@@ -38,53 +91,4 @@ class Files(object):
                 if not self.options.recursive:
                     break
 
-        logging.info('%d files found' % (len(file_list)))
-        return file_list
-
-
-def get_excluded_subs(options):
-    logging.debug('Looking for excluded subs')
-    excluded_subs = []
-    if options.exclude_subs:
-        for file in os.listdir(options.exclude_subs):
-            fp = open(os.path.join(options.exclude_subs, file), 'r')
-            h = hashlib.md5()
-            h.update(fp.read())
-            fp.close()
-            excluded_subs.append(h.hexdigest())
-    logging.info('%d excluded subs.' % (len(excluded_subs),))
-    return excluded_subs
-
-
-def hashFile(name):
-    """Opensubtitles hash function modified to return not only the hash but
-    also the file size.
-    http://trac.opensubtitles.org/projects/opensubtitles/wiki/HashSourceCodes#Python
-    """
-    longlongformat = 'q'  # long long 
-    bytesize = struct.calcsize(longlongformat) 
-        
-    f = open(name, "rb") 
-        
-    filesize = os.path.getsize(name) 
-    hash = filesize 
-        
-    if filesize < 65536 * 2: 
-        raise Exception("SizeError")
-     
-    for x in range(65536/bytesize): 
-        buffer = f.read(bytesize) 
-        (l_value,)= struct.unpack(longlongformat, buffer)  
-        hash += l_value 
-        hash = hash & 0xFFFFFFFFFFFFFFFF #to remain as 64bit number  
-
-    f.seek(max(0,filesize-65536),0) 
-    for x in range(65536/bytesize): 
-        buffer = f.read(bytesize) 
-        (l_value,)= struct.unpack(longlongformat, buffer)  
-        hash += l_value 
-        hash = hash & 0xFFFFFFFFFFFFFFFF 
-     
-    f.close() 
-    returnedhash =  "%016x" % hash 
-    return returnedhash, filesize 
+        return [MediaFile(file_, self.options) for file_ in file_list]
