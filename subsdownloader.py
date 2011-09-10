@@ -22,16 +22,22 @@ def main(options):
             logging.info('Quota reached, ending !.')
             break
         try:
-            for subtitle in server.search(options.lang, file_):
-                if subtitle.get_hash() in excluded_subs:
-                    logging.debug('Buggy sub, next !')
-                    # Lets try with next sub entry
-                    continue
-                file_.save(subtitle.download(), subtitle.get_format())
-                quota.qty += 1
-                downloaded.append(file_.filename)
-                # Break for, don't want to loop over the next subs
-                break
+            for lang in options.langs:
+                logging.debug(' > Searching for %s language', lang)
+                sub_downloaded = False
+                for subtitle in server.search(lang, file_):
+                    if subtitle.get_hash() in excluded_subs:
+                        logging.debug('Buggy sub, next !')
+                        # Lets try with next sub entry
+                        continue
+                    file_.save(subtitle.download(), subtitle.get_format())
+                    quota.qty += 1
+                    downloaded.append(file_.filename)
+                    sub_downloaded = True
+                    # Break for, don't want to loop over the next subs
+                    break
+                if sub_downloaded:
+                    break
         except Exception,e:
             logging.exception(e)
             # Lets try with the next file if any.

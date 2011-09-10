@@ -7,7 +7,7 @@ def _define_options():
     parser = optparse.OptionParser()
     parser.add_option('--log-level', type='string', dest='log_level', default='DEBUG', help='Define log level (DEBUG, INFO, etc).')
     parser.add_option('--config', type='string', dest='config', default=None, help='Load config from file.')
-    parser.add_option('--lang', type='string', dest='lang', action='append', default=[], help='Subtitle download language.')
+    parser.add_option('--langs', type='string', dest='langs', action='append', default=[], help='Subtitle download language.')
 
     dir_group = optparse.OptionGroup(parser, 'Directory options')
     dir_group.add_option('-r', '--recursive', dest='recursive', action='store_true', default=False, help='Recursively look for files.')
@@ -70,7 +70,7 @@ def parse_options():
         )
 
     # Remove duplicated entries from list options
-    options.lang = remove_dups(options.lang)
+    options.langs = remove_dups(options.langs)
     options.exclude = remove_dups(options.exclude)
     options.regex = remove_dups(options.regex)
     options.to = remove_dups(options.to) 
