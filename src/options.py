@@ -3,7 +3,7 @@ import optparse
 
 import logging
 
-def parse_options():
+def _define_options():
     parser = optparse.OptionParser()
     parser.add_option('--log-level', type='string', dest='log_level', default='DEBUG', help='Define log level (DEBUG, INFO, etc).')
     parser.add_option('--config', type='string', dest='config', default=None, help='Load config from file.')
@@ -33,7 +33,12 @@ def parse_options():
     email_group.add_option('--smtp-pass', type='string', dest='smtp_pass', help='Server password.')
     email_group.add_option('--use-tls', dest='smtp_tls', action='store_true', default=True, help='Use tls.')
     parser.add_option_group(email_group)
+    
+    return parser
 
+
+def parse_options():
+    parser = _define_options()
     (options, args) = parser.parse_args()
 
     if options.config:
@@ -41,6 +46,7 @@ def parse_options():
             fname = os.path.basename(options.config)
             module, ext = os.path.splitext(fname)
             C = __import__(module)
+            parser = _define_options()
             parser.set_defaults(**C.options)
             (options, args) = parser.parse_args()
         except Exception, e:
