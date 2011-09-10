@@ -7,7 +7,7 @@ def _define_options():
     parser = optparse.OptionParser()
     parser.add_option('--log-level', type='string', dest='log_level', default='DEBUG', help='Define log level (DEBUG, INFO, etc).')
     parser.add_option('--config', type='string', dest='config', default=None, help='Load config from file.')
-    parser.add_option('--lang', type='string', dest='lang', default='spa', help='Subtitle download language.')
+    parser.add_option('--lang', type='string', dest='lang', action='append', default=[], help='Subtitle download language.')
 
     dir_group = optparse.OptionGroup(parser, 'Directory options')
     dir_group.add_option('-r', '--recursive', dest='recursive', action='store_true', default=False, help='Recursively look for files.')
@@ -26,7 +26,7 @@ def _define_options():
     email_group = optparse.OptionGroup(parser, 'Email options')
     email_group.add_option('--notify', dest='notify', action='store_true', default=False, help='Notification email on download.')
     email_group.add_option('--from', type='string', dest='from_', help='Your email.')
-    email_group.add_option('--to', type='string', dest='to', action='append', help='Destination email. (Multiple)')
+    email_group.add_option('--to', type='string', dest='to', action='append', default=[], help='Destination email. (Multiple)')
     email_group.add_option('--smtp-server', type='string', dest='smtp_server', default='smtp.gmail.com', help='SMTP server.')
     email_group.add_option('--smtp-port', type='string', dest='smtp_port', default=587, help='SMTP Server port.')
     email_group.add_option('--smtp-user', type='string', dest='smtp_user', help='Server user.')
@@ -69,7 +69,25 @@ def parse_options():
         datefmt = '%Y-%m-%d %H:%M:%S',
         )
 
+    # Remove duplicated entries from list options
+    options.lang = remove_dups(options.lang)
+    options.exclude = remove_dups(options.exclude)
+    options.regex = remove_dups(options.regex)
+    options.to = remove_dups(options.to) 
+
     return options
 
+# These functions were borrowed from here
+# http://www.peterbe.com/plog/uniqifiers-benchmark
+# The functions here are f11 and _f11 from Update section
+def remove_dups(seq):
+    # Order preserving
+    return list(_remove_dups_helper(seq))
 
-
+def _remove_dups_helper(seq):
+    seen = set()
+    for x in seq:
+        if x in seen:
+            continue
+        seen.add(x)
+        yield x
