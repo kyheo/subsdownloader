@@ -1,3 +1,4 @@
+import os
 import optparse
 
 import logging
@@ -5,7 +6,7 @@ import logging
 def parse_options():
     parser = optparse.OptionParser()
     parser.add_option('--log-level', type='string', dest='log_level', default='DEBUG', help='Define log level (DEBUG, INFO, etc).')
-    parser.add_option('--config-module', type='string', dest='config_module', default=None, help='Load config from module (no py extension).')
+    parser.add_option('--config', type='string', dest='config', default=None, help='Load config from file.')
     parser.add_option('--lang', type='string', dest='lang', default='spa', help='Subtitle download language.')
 
     dir_group = optparse.OptionGroup(parser, 'Directory options')
@@ -35,9 +36,11 @@ def parse_options():
 
     (options, args) = parser.parse_args()
 
-    if options.config_module:
+    if options.config:
         try:
-            C = __import__(options.config_module)
+            fname = os.path.basename(options.config)
+            module, ext = os.path.splitext(fname)
+            C = __import__(module)
             parser.set_defaults(**C.options)
             (options, args) = parser.parse_args()
         except Exception, e:
