@@ -1,13 +1,13 @@
-#! /usr/bin/env python
 import logging
 
-from src import options
-from src import quota as quota_utils
-from src import files as files_utils
-from src import emails
-from src import opensubtitles
+from subsdownloader import options as options_utils
+from subsdownloader import quota as quota_utils
+from subsdownloader import files as files_utils
+from subsdownloader import emails
+from subsdownloader import opensubtitles
 
-def main(options):
+def main():
+    options = options_utils.parse_options()
     server = opensubtitles.Server(options)
     server.connect()
 
@@ -52,7 +52,4 @@ def main(options):
 
 
 if __name__ == '__main__':
-    opts = options.parse_options()
-    logging.info('Starting')
-    main(opts)
-    logging.info('Ending')
+    main()
