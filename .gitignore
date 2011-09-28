@@ -1,5 +1,10 @@
 *.pyc
-config_kyheo.py
-clean.sh
-excluded_subs/
-q-in/
+.installed.cfg
+bin/
+dev_env/
+develop-eggs/
+eggs/
+env_clear.sh
+env_start.sh
+env_update.sh
+subsdownloader.egg-info/
