@@ -4,9 +4,10 @@ import logging
 
 def parse_options():
     usage = 'usage: %prog [options] source\n' \
-        '   source could be a file or a directory'
+        '   source is the directory where the media files are located'
     parser = optparse.OptionParser(usage=usage)
-    parser.add_option("-v", action="store_true", dest="verbose", default=False, help='Show as much information as possible.')
+    parser.add_option("-v", action="store_true", dest="verbose", default=False, help='Show more information as possible.')
+    parser.add_option("-y", action="store_true", dest="vverbose", default=False, help='Show as much information as possible.')
     parser.add_option('-r', dest='recursive', action='store_true', default=False, help='Recurse subdirectories.')
     parser.add_option('-l', type='string', dest='languages', metavar='LANG', action='append', default=[], help='Subtitle download language. (Can be used multiple times).')
     parser.add_option('-d', type='string', dest='destination', metavar='DEST', help='Destination directory. Default to source one.')
@@ -16,20 +17,21 @@ def parse_options():
     if not args or len(args) > 1:
         parser.error('You must provide one source.')
     options.source = args[0]
-    if not options.destination:
-        options.destination = options.source
 
     if not options.languages:
         parser.error('You must provide at least one language option.')
     options.languages = remove_dups(options.languages)
 
-    if options.verbose is True:
+    if options.vverbose is True:
         log_level = logging.DEBUG
+    elif options.verbose is True:
+        log_level = logging.INFO
     else:
         log_level = logging.ERROR
 
     logging.basicConfig(level=log_level, datefmt='%Y-%m-%d %H:%M:%S',
-        format='%(asctime)s - %(levelname)s - %(filename)s:%(lineno)s - %(message)s',
+#        format='%(asctime)s - %(levelname)s - %(filename)s:%(lineno)s - %(message)s',
+        format='%(levelname)8s - %(filename)s:%(lineno)s - %(message)s',
         )
 
     return options
