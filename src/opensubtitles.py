@@ -6,6 +6,14 @@ import gzip
 import struct
 import os
 
+#quota_group = optparse.OptionGroup(parser, 'Quota options')
+#quota_group.add_option('--quota-file', type='string', dest='quota_file', default='/tmp/quota-file.json', help='Track file for quota limits. Should persist over time.')
+#quota_group.add_option('--quota-limit', type='int', dest='quota_limit', default=200, help='Max number of allowed downloads. Change this at your own risk.')
+#parser.add_option_group(quota_group)
+
+# Hardcoded values, shouldn't change at all
+#options.api_url = 'http://api.opensubtitles.org/xml-rpc'
+#options.api_user_agent = 'Kyheo SubsDown v0.1'
 
 class Subtitle(object):
 
