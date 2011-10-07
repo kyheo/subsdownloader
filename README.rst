@@ -1,14 +1,37 @@
 SubsDownloader
 ==============
-Automatically download subtitles for a list of files in an incoming queue
-directory, and store both (video and subtitle) in an outgoing one.
+This is *yet another* subtitle downloader. For any given file it will search for
+the best subtitle available and will download it.
 
-This first version will use `opensubtitles.org`_ API.
-To get the best subtitle match, this first version will need the video file just
-to get a hash from it, later version will work with name lists.
+Providers
+---------
+Right know `Opensubtitles`_ is the only provider supported, but the idea is to
+support the following ones (please suggest more)
 
-.. _`opensubtitles.org`: http://www.opensubtitles.org
+* TVSubtitles
+* Subscene
+* Bierdopje
+* Podnapisi
+* MovieSubtitles
+* s4u.se
+* ItalianSubs.net
+* SeriesSub.com
+* Sous-titres.eu
+* SubsCenter.org
+* Subsfactory.it
+* Titlovi.com
+* Titulky.com
+* Addic7ed
+* SubScene
+* SubsWiki
+* SubtitleDatabase
+* SubtitleSource
+* Subtitulos
+* TheSubDB
+
+
+.. _`Opensubtitles`: http://www.opensubtitles.org
 
 Contact
-=======
+-------
 Martín Marrese - marrese@gmail.com
