@@ -3,7 +3,6 @@ import logging
 from subsdownloader.options import parse_options
 from subsdownloader import files
 from subsdownloader import providers
-from subsdownloader import utils
 
 def main():
     options = parse_options()
@@ -23,7 +22,7 @@ def main():
             logging.debug('> Querying %s', provider.NAME)
             subtitles += provider.search(file_, options.languages)
 
-        subtitles = utils.sort_subtitles(subtitles)
+        # Subtitles must be sort before trying to download any file.
         for subtitle in subtitles:
             try:
                 logging.debug('>> Downloading Subtitle')
